@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import type { ParsedSheet, ParsedXlsx, ParsedProfileColumn } from '../types'
 import { useSession } from '../state/session'
 import { buildProfileSeries } from '../processing/profile'
-import { ProfileChart, type MarkMode } from './profile-chart'
+import { ProfileChart } from './profile-chart'
+import { GraphEditorModal } from './graph-editor-modal'
 import { resolveCalibration, applyCalibration } from '../processing/calibrate'
 
 export function ProfilePanel({
@@ -19,7 +20,7 @@ export function ProfilePanel({
   const toggleFlagged = useSession((s) => s.toggleFlagged)
   const updateProfile = useSession((s) => s.updateProfile)
 
-  const [mode, setMode] = useState<MarkMode>('zero-depth')
+  const [editorOpen, setEditorOpen] = useState(false)
 
   const series = useMemo(
     () => buildProfileSeries(sheet, col.index, state),
@@ -42,14 +43,6 @@ export function ProfilePanel({
       sensorKind: col.sensor,
     })
 
-  const onPickRow = (rowIndex: number) => {
-    if (mode === 'zero-depth') {
-      setZeroDepth({ sheet: sheet.name, colIndex: col.index }, rowIndex)
-    } else {
-      toggleFlagged({ sheet: sheet.name, colIndex: col.index }, rowIndex)
-    }
-  }
-
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 space-y-4">
       <div className="flex items-start justify-between gap-4">
@@ -60,39 +53,42 @@ export function ProfilePanel({
           </p>
         </div>
         <div className="flex gap-2 text-xs">
-          <ModeButton current={mode} mode="zero-depth" onClick={setMode} label="0-depth click" />
-          <ModeButton current={mode} mode="flag" onClick={setMode} label="flag click" />
+          <button
+            type="button"
+            onClick={() => setEditorOpen(true)}
+            className="px-3 py-1.5 rounded border border-indigo-600 bg-indigo-950/40 text-indigo-100 hover:bg-indigo-900/40"
+          >
+            Modify graph
+          </button>
         </div>
       </div>
 
       <ProfileChart
         series={series}
-        zeroDepthRowIndex={state.zeroDepthRowIndex}
+        zeroDepthValue={state.zeroDepthValue}
         flagged={state.flaggedRowIndices}
-        mode={mode}
-        onPickRow={onPickRow}
       />
 
       <div className="grid grid-cols-2 gap-4 text-sm">
-        <Field label="0-depth row">
-          {state.zeroDepthRowIndex == null ? (
-            <span className="text-zinc-500 text-xs">
-              not set · chart-click in 0-depth mode, or click a Depth cell in the viewer
-            </span>
+        <Field label="0-depth">
+          {state.zeroDepthValue == null ? (
+            <span className="text-zinc-500 text-xs">not set</span>
           ) : (
             <button
-              className="text-emerald-300 hover:text-emerald-200 underline text-xs"
+              className="text-emerald-300 hover:text-emerald-200 underline text-xs font-mono"
               onClick={() => setZeroDepth({ sheet: sheet.name, colIndex: col.index }, null)}
             >
-              row {state.zeroDepthRowIndex} — clear
+              {formatDepthLabel(state.zeroDepthValue)} — clear
             </button>
           )}
         </Field>
         <Field label="Flagged rows">
           {state.flaggedRowIndices.length === 0 ? (
-            <span className="text-zinc-500">none</span>
+            <span className="text-zinc-500 text-xs">none</span>
           ) : (
-            <span className="text-red-300">{state.flaggedRowIndices.length}</span>
+            <span className="text-red-300 text-xs">
+              {state.flaggedRowIndices.length} marked incoherent
+            </span>
           )}
         </Field>
       </div>
@@ -205,38 +201,31 @@ export function ProfilePanel({
         </Field>
       </div>
 
-      <FlaggedRowsList sheet={sheet.name} col={col.index} indices={state.flaggedRowIndices} />
-
       <Preview series={series} previewCalibrated={previewCalibrated} />
+
+      {editorOpen && (
+        <GraphEditorModal
+          series={series}
+          initialZeroDepth={state.zeroDepthValue}
+          initialFlags={state.flaggedRowIndices}
+          onCommitZeroDepth={(value) =>
+            setZeroDepth({ sheet: sheet.name, colIndex: col.index }, value)
+          }
+          onCommitFlagToggles={(toToggle) => {
+            for (const r of toToggle) {
+              toggleFlagged({ sheet: sheet.name, colIndex: col.index }, r)
+            }
+          }}
+          onClose={() => setEditorOpen(false)}
+        />
+      )}
     </div>
   )
 }
 
-function ModeButton({
-  current,
-  mode,
-  onClick,
-  label,
-}: {
-  current: MarkMode
-  mode: MarkMode
-  onClick: (m: MarkMode) => void
-  label: string
-}) {
-  const active = current === mode
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(mode)}
-      className={`px-2 py-1 rounded border text-xs ${
-        active
-          ? 'border-indigo-500 bg-indigo-950 text-indigo-100'
-          : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
-      }`}
-    >
-      {label}
-    </button>
-  )
+function formatDepthLabel(v: number): string {
+  if (Math.abs(v) >= 1000) return `${v.toFixed(0)} µm`
+  return `${v.toFixed(2)} µm`
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -244,36 +233,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <div className="text-[11px] uppercase tracking-wide text-zinc-500 mb-1">{label}</div>
       <div>{children}</div>
-    </div>
-  )
-}
-
-function FlaggedRowsList({
-  sheet,
-  col,
-  indices,
-}: {
-  sheet: string
-  col: number
-  indices: number[]
-}) {
-  const toggleFlagged = useSession((s) => s.toggleFlagged)
-  if (indices.length === 0) return null
-  return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wide text-zinc-500 mb-1">Flagged rows</div>
-      <div className="flex flex-wrap gap-1">
-        {indices.map((i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => toggleFlagged({ sheet, colIndex: col }, i)}
-            className="text-[11px] px-1.5 py-0.5 rounded bg-red-950 text-red-200 border border-red-800 hover:bg-red-900"
-          >
-            row {i} ×
-          </button>
-        ))}
-      </div>
     </div>
   )
 }

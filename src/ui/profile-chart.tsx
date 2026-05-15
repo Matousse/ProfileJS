@@ -2,20 +2,19 @@ import { useEffect, useRef } from 'react'
 import uPlot from 'uplot'
 import type { ProfileSeries } from '../processing/profile'
 
-export type MarkMode = 'zero-depth' | 'flag'
-
+/**
+ * Compact in-panel chart. Read-only: no click-to-toggle-flag, no click-to-pick-depth.
+ * All editing happens in the GraphEditorModal opened via the "Modify graph" button.
+ * Flagged points are drawn as red rings for visual feedback only.
+ */
 export function ProfileChart({
   series,
-  zeroDepthRowIndex,
+  zeroDepthValue,
   flagged,
-  mode,
-  onPickRow,
 }: {
   series: ProfileSeries
-  zeroDepthRowIndex: number | null
+  zeroDepthValue: number | null
   flagged: number[]
-  mode: MarkMode
-  onPickRow: (rowIndex: number) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
@@ -23,10 +22,7 @@ export function ProfileChart({
   useEffect(() => {
     if (!ref.current) return
 
-    const normalized = zeroDepthRowIndex != null
-    // X = raw mV, Y = depth. When the user has set a 0-depth row, plot the
-    // normalized depth (raw - zero) so the scale shifts but every data point
-    // is preserved. Without a 0-depth row, plot raw depth.
+    const normalized = zeroDepthValue != null
     const xs: number[] = []
     const ys: number[] = []
     const indices: number[] = []
@@ -42,7 +38,7 @@ export function ProfileChart({
     const flaggedSet = new Set(flagged)
     const data: uPlot.AlignedData = [xs, ys]
 
-    const flaggedPlugin: uPlot.Plugin = {
+    const overlayPlugin: uPlot.Plugin = {
       hooks: {
         draw: [
           (u) => {
@@ -50,25 +46,16 @@ export function ProfileChart({
             ctx.save()
             for (let i = 0; i < xs.length; i++) {
               const idx = indices[i]
+              if (!flaggedSet.has(idx)) continue
               const cx = u.valToPos(xs[i], 'x', true)
               const cy = u.valToPos(ys[i], 'y', true)
-              if (idx === zeroDepthRowIndex) {
-                ctx.fillStyle = '#10b981'
-                ctx.beginPath()
-                ctx.arc(cx, cy, 5, 0, Math.PI * 2)
-                ctx.fill()
-              }
-              if (flaggedSet.has(idx)) {
-                ctx.strokeStyle = '#ef4444'
-                ctx.lineWidth = 2
-                ctx.beginPath()
-                ctx.arc(cx, cy, 5, 0, Math.PI * 2)
-                ctx.stroke()
-              }
+              ctx.strokeStyle = '#ef4444'
+              ctx.lineWidth = 2
+              ctx.beginPath()
+              ctx.arc(cx, cy, 5, 0, Math.PI * 2)
+              ctx.stroke()
             }
-            // Horizontal reference line at y = 0 — always.
-            // When normalized: marks the user-selected surface.
-            // When raw:       marks the XLSX's native depth zero.
+            // Horizontal reference line at y = 0.
             const yMin = u.scales.y.min
             const yMax = u.scales.y.max
             if (yMin != null && yMax != null && 0 >= Math.min(yMin, yMax) && 0 <= Math.max(yMin, yMax)) {
@@ -94,20 +81,14 @@ export function ProfileChart({
       title: series.header,
       scales: {
         x: { time: false },
-        // depth grows downward in the original data; keep -1 so deeper = lower on screen
         y: { dir: -1 },
       },
       axes: [
+        { label: 'Raw (mV)', stroke: '#a1a1aa', side: 0 },
         {
-          label: 'Raw (mV)',
+          label: normalized ? 'Depth normalized (µm, 0 = chosen surface)' : 'Depth (µm)',
           stroke: '#a1a1aa',
-          // X axis on the top edge of the plot.
-          side: 0,
-        },
-        {
-          label: normalized ? 'Depth normalized (um, 0 = marked row)' : 'Depth (um)',
-          stroke: '#a1a1aa',
-          side: 3, // left
+          side: 3,
         },
       ],
       series: [
@@ -119,47 +100,21 @@ export function ProfileChart({
           points: { show: true, size: 4, stroke: '#818cf8', fill: '#1e1b4b' },
         },
       ],
-      plugins: [flaggedPlugin],
+      plugins: [overlayPlugin],
+      // Non-interactive: no drag, no cursor binds. Hover crosshair still works.
       cursor: {
-        // Disable drag-to-zoom entirely — clicks should pick a point, not zoom.
         drag: { x: false, y: false, setScale: false },
-        bind: {
-          mouseup: (u, _target, handler) => {
-            return (e: MouseEvent) => {
-              const idx = u.cursor.idx
-              if (idx != null && idx >= 0 && idx < indices.length) {
-                onPickRow(indices[idx])
-              }
-              return handler(e)
-            }
-          },
-        },
       },
     }
 
-    if (plotRef.current) {
-      plotRef.current.destroy()
-    }
+    if (plotRef.current) plotRef.current.destroy()
     plotRef.current = new uPlot(opts, data, ref.current)
 
     return () => {
       plotRef.current?.destroy()
       plotRef.current = null
     }
-  }, [series, zeroDepthRowIndex, flagged, mode, onPickRow])
+  }, [series, zeroDepthValue, flagged])
 
-  return (
-    <div>
-      <div ref={ref} />
-      <p className="text-xs text-zinc-500 mt-1">
-        Click a point to{' '}
-        {mode === 'zero-depth' ? (
-          <span className="text-emerald-400">mark it as 0-depth</span>
-        ) : (
-          <span className="text-red-400">toggle its incoherence flag</span>
-        )}
-        .
-      </p>
-    </div>
-  )
+  return <div ref={ref} />
 }

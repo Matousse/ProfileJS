@@ -52,7 +52,7 @@ export function buildResultsCsv(xlsx: ParsedXlsx, session: SessionV1): string {
         calibration_intercept: cal.intercept,
         temperature_c: state.temperatureC,
         salinity_psu: state.salinityPSU,
-        zero_depth_row_index: state.zeroDepthRowIndex,
+        zero_depth_value_um: state.zeroDepthValue,
       })
     }
   }

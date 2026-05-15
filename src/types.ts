@@ -76,8 +76,12 @@ export type ProfileKey = {
 export type ProfileState = {
   /** Whether this profile column is enabled (sensor was actually plugged in for this cast). */
   enabled: boolean
-  /** Manually-selected 0-depth row index (0-based within data rows). null = not set. */
-  zeroDepthRowIndex: number | null
+  /**
+   * User-selected 0-depth reference (in the same units as the XLSX depth column, i.e. µm).
+   * Free-form value — does NOT have to coincide with any data row's depth.
+   * null = not set; profile uses raw depth as-is.
+   */
+  zeroDepthValue: number | null
   /** Indices of rows the user has flagged as incoherent. */
   flaggedRowIndices: number[]
   /** Manually-entered calibration overrides (slope/intercept) when XLSX values are absent or user wants to override. */

@@ -26,12 +26,7 @@ export function buildProfileSeries(
 ): ProfileSeries {
   const depthCol = sheet.depthCol
   const flagged = new Set(state.flaggedRowIndices)
-
-  let zeroDepth: number | null = null
-  if (state.zeroDepthRowIndex != null && depthCol != null) {
-    const v = sheet.rows[state.zeroDepthRowIndex]?.[depthCol]
-    zeroDepth = numOrNull(v)
-  }
+  const zeroDepth = state.zeroDepthValue
 
   const rows: ProfileRow[] = sheet.rows.map((row, i) => {
     const rawDepth = depthCol != null ? numOrNull(row[depthCol]) : null

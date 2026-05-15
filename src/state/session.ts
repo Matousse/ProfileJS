@@ -22,7 +22,7 @@ type Store = {
   getProfile: (k: ProfileKey) => ProfileState
   updateProfile: (k: ProfileKey, patch: Partial<ProfileState>) => void
   toggleEnabled: (k: ProfileKey) => void
-  setZeroDepth: (k: ProfileKey, rowIndex: number | null) => void
+  setZeroDepth: (k: ProfileKey, depthValue: number | null) => void
   toggleFlagged: (k: ProfileKey, rowIndex: number) => void
 
   setEnvironment: (patch: Partial<EnvironmentVars>) => void
@@ -34,7 +34,7 @@ type Store = {
 
 const defaultProfileState = (): ProfileState => ({
   enabled: true,
-  zeroDepthRowIndex: null,
+  zeroDepthValue: null,
   flaggedRowIndices: [],
   manualCalibration: { slope: null, intercept: null, calibrationId: null },
   temperatureC: null,
@@ -108,11 +108,11 @@ export const useSession = create<Store>((set, get) => ({
       return { profiles: { ...s.profiles, [key]: { ...prev, enabled: !prev.enabled } } }
     }),
 
-  setZeroDepth: (k, rowIndex) =>
+  setZeroDepth: (k, depthValue) =>
     set((s) => {
       const key = profileKeyStr(k)
       const prev = s.profiles[key] ?? defaultProfileState()
-      return { profiles: { ...s.profiles, [key]: { ...prev, zeroDepthRowIndex: rowIndex } } }
+      return { profiles: { ...s.profiles, [key]: { ...prev, zeroDepthValue: depthValue } } }
     }),
 
   toggleFlagged: (k, rowIndex) =>

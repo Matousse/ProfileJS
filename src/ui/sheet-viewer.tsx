@@ -23,7 +23,7 @@ export function SheetViewer({
   onSelectProfile: (colIndex: number) => void
   zeroDepthTarget: ZeroDepthTarget
   onSetZeroDepthTarget: (colIndex: number | null) => void
-  onPickZeroDepth: (colIndex: number, rowIndex: number) => void
+  onPickZeroDepth: (colIndex: number, depthValue: number | null) => void
 }) {
   const profiles = useSession((s) => s.profiles)
   const toggleEnabled = useSession((s) => s.toggleEnabled)
@@ -63,7 +63,7 @@ export function SheetViewer({
     targetCol != null
       ? profiles[profileKeyStr({ sheet: sheet.name, colIndex: targetCol })]
       : undefined
-  const targetZeroRow = targetState?.zeroDepthRowIndex ?? null
+  const targetZeroValue = targetState?.zeroDepthValue ?? null
 
   const rowsToShow = showAllRows ? sheet.rows : sheet.rows.slice(0, PREVIEW_ROWS)
   const pickingActive = targetCol != null && sheet.depthCol != null
@@ -117,12 +117,13 @@ export function SheetViewer({
             {profileColByIndex.get(targetCol!)?.sensorLabel ?? `col ${targetCol}`}
           </span>
           .{' '}
-          {targetZeroRow != null && (
+          {targetZeroValue != null && (
             <>
-              Current: row <span className="font-semibold">{targetZeroRow}</span>.{' '}
+              Current: depth ={' '}
+              <span className="font-semibold">{formatDepth(targetZeroValue)}</span>.{' '}
               <button
                 type="button"
-                onClick={() => onPickZeroDepth(targetCol!, -1)}
+                onClick={() => onPickZeroDepth(targetCol!, null)}
                 className="underline hover:text-emerald-100"
               >
                 clear
@@ -193,7 +194,9 @@ export function SheetViewer({
           </thead>
           <tbody>
             {rowsToShow.map((row, ri) => {
-              const isZero = targetZeroRow === ri
+              const cellDepth = sheet.depthCol != null ? toNum(row[sheet.depthCol]) : null
+              const isZero =
+                targetZeroValue != null && cellDepth != null && cellDepth === targetZeroValue
               return (
                 <tr
                   key={ri}
@@ -227,11 +230,15 @@ export function SheetViewer({
                             : ''
                         }`}
                         onClick={() => {
-                          if (isDepthPickable && targetCol != null) {
-                            onPickZeroDepth(targetCol, ri)
+                          if (isDepthPickable && targetCol != null && cellDepth != null) {
+                            onPickZeroDepth(targetCol, cellDepth)
                           }
                         }}
-                        title={isDepthPickable ? `Set 0-depth = row ${ri}` : ''}
+                        title={
+                          isDepthPickable && cellDepth != null
+                            ? `Set 0-depth = ${formatDepth(cellDepth)}`
+                            : ''
+                        }
                       >
                         {formatCell(v)}
                       </td>
@@ -254,4 +261,15 @@ function formatCell(v: string | number | null): string {
     return Number(v.toPrecision(7)).toString()
   }
   return v
+}
+
+function toNum(v: unknown): number | null {
+  if (v == null || v === '') return null
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+export function formatDepth(value: number): string {
+  if (Math.abs(value) >= 1000) return `${value.toFixed(0)} µm`
+  return `${value.toFixed(2)} µm`
 }

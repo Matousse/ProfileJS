@@ -110,8 +110,8 @@ export function App() {
               onSelectProfile={(idx) => setSelectedCol(idx)}
               zeroDepthTarget={{ colIndex: zeroDepthTargetCol }}
               onSetZeroDepthTarget={setZeroDepthTargetCol}
-              onPickZeroDepth={(colIndex, rowIndex) =>
-                setZeroDepth({ sheet: sheet.name, colIndex }, rowIndex < 0 ? null : rowIndex)
+              onPickZeroDepth={(colIndex, depthValue) =>
+                setZeroDepth({ sheet: sheet.name, colIndex }, depthValue)
               }
             />
           ) : (
